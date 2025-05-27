@@ -1,0 +1,65 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local stompRemote = ReplicatedStorage:WaitForChild("MainEvent")
+
+local hiddenPosition = Vector3.new(741.16, 48.00, -549.55)
+local autoStompDuration = 1 -- stomp each player for 1 second
+local stompCooldown = 1 -- wait after finishing all stomps
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local function isPlayerKnocked(plr)
+	local bodyEffects = plr.Character and plr.Character:FindFirstChild("BodyEffects")
+	local ko = bodyEffects and bodyEffects:FindFirstChild("K.O")
+	return ko and ko.Value == true
+end
+
+-- Function to run your main stomp loop
+local function startAutoStomp()
+	task.spawn(function()
+		while true do
+			local stompedPlayers = {}
+			local knockedPlayers = {}
+
+			for _, plr in pairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and isPlayerKnocked(plr) then
+					table.insert(knockedPlayers, plr)
+				end
+			end
+
+			for _, plr in ipairs(knockedPlayers) do
+				if not stompedPlayers[plr] then
+					local targetTorso = plr.Character and (plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("LowerTorso"))
+					if targetTorso and HumanoidRootPart then
+						local startTime = tick()
+						while tick() - startTime < autoStompDuration do
+							if not isPlayerKnocked(plr) then break end
+							HumanoidRootPart.CFrame = CFrame.new(targetTorso.Position + Vector3.new(0, 3, 0))
+							stompRemote:FireServer("Stomp")
+							RunService.Heartbeat:Wait()
+						end
+						stompedPlayers[plr] = true
+					end
+				end
+			end
+
+			HumanoidRootPart.CFrame = CFrame.new(hiddenPosition)
+			wait(stompCooldown)
+			RunService.Heartbeat:Wait()
+		end
+	end)
+end
+
+-- Listen for character respawn to update variables and keep script running
+LocalPlayer.CharacterAdded:Connect(function(char)
+	Character = char
+	HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+end)
+
+-- Start the stomp loop
+startAutoStomp()
