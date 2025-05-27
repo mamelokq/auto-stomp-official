@@ -1,0 +1,43 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- Local Player
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+local StompEvent = ReplicatedStorage:WaitForChild("MainEvent")
+
+-- Function to check if a player is knocked
+local function isKnocked(player)
+    local char = player.Character
+    if char and char:FindFirstChild("BodyEffects") then
+        local ko = char.BodyEffects:FindFirstChild("K.O")
+        return ko and ko.Value == true
+    end
+    return false
+end
+
+-- Function to stomp a knocked player
+local function stompPlayer(player)
+    local char = player.Character
+    if not char then return end
+
+    local targetTorso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("LowerTorso")
+    if targetTorso then
+        -- Teleport above the player
+        HumanoidRootPart.CFrame = CFrame.new(targetTorso.Position + Vector3.new(0, 3, 0))
+        task.wait(0.35) -- slight delay before stomping
+        StompEvent:FireServer("Stomp")
+    end
+end
+
+-- Auto-loop to check for knocked players and stomp
+RunService.Heartbeat:Connect(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isKnocked(player) then
+            stompPlayer(player)
+        end
+    end
+end)
