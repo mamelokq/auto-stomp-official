@@ -1,0 +1,222 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local stompRemote = ReplicatedStorage:WaitForChild("MainEvent")
+
+local hiddenPosition = Vector3.new(741.16, 48.00, -549.55)
+local autoStompDuration = 1 -- stomp each player for 1 second
+local stompCooldown = 1 -- wait after finishing all stomps
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local function isPlayerKnocked(plr)
+	local bodyEffects = plr.Character and plr.Character:FindFirstChild("BodyEffects")
+	local ko = bodyEffects and bodyEffects:FindFirstChild("K.O")
+	return ko and ko.Value == true
+end
+
+-- Function to run your main stomp loop
+local function startAutoStomp()
+	task.spawn(function()
+		while true do
+			local stompedPlayers = {}
+			local knockedPlayers = {}
+
+			for _, plr in pairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and isPlayerKnocked(plr) then
+					table.insert(knockedPlayers, plr)
+				end
+			end
+
+			for _, plr in ipairs(knockedPlayers) do
+				if not stompedPlayers[plr] then
+					local targetTorso = plr.Character and (plr.Character:FindFirstChild("UpperTorso") or plr.Character:FindFirstChild("LowerTorso"))
+					if targetTorso and HumanoidRootPart then
+						local startTime = tick()
+						while tick() - startTime < autoStompDuration do
+							if not isPlayerKnocked(plr) then break end
+							HumanoidRootPart.CFrame = CFrame.new(targetTorso.Position + Vector3.new(0, 3, 0))
+							stompRemote:FireServer("Stomp")
+							RunService.Heartbeat:Wait()
+						end
+						stompedPlayers[plr] = true
+					end
+				end
+			end
+
+			HumanoidRootPart.CFrame = CFrame.new(hiddenPosition)
+			wait(stompCooldown)
+			RunService.Heartbeat:Wait()
+		end
+	end)
+end
+
+-- Listen for character respawn to update variables and keep script running
+LocalPlayer.CharacterAdded:Connect(function(char)
+	Character = char
+	HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+end)
+
+-- Start the stomp loop
+startAutoStomp()
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local HumanoidStateType = Enum.HumanoidStateType
+local KOD = "K.O"
+local GRABBING_CONSTRAINT = "GRABBING_CONSTRAINT"
+
+local antiStompEnabled = true  -- Enabled by default on inject
+
+-- Function to apply anti-stomp measures to the character
+local function applyAntiStomp(character)
+    if not character then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    local bodyEffects = character:FindFirstChild("BodyEffects")
+
+    -- Check if knocked or grabbed
+    local knocked = bodyEffects and bodyEffects:FindFirstChild(KOD) and bodyEffects[KOD].Value
+    local grabbed = character:FindFirstChild(GRABBING_CONSTRAINT) ~= nil
+
+    if antiStompEnabled and (knocked or grabbed) then
+        -- Kill character immediately
+        humanoid.Health = 0
+
+        -- Disable collisions on all parts
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+
+        -- Disable humanoid states to prevent interactions
+        humanoid.PlatformStand = true
+        humanoid.WalkSpeed = 0
+        humanoid.JumpPower = 0
+        humanoid.JumpHeight = 0
+        humanoid:SetStateEnabled(HumanoidStateType.Physics, false)
+        humanoid:SetStateEnabled(HumanoidStateType.Seated, false)
+        humanoid:SetStateEnabled(HumanoidStateType.Climbing, false)
+        humanoid:SetStateEnabled(HumanoidStateType.Freefall, false)
+        humanoid:SetStateEnabled(HumanoidStateType.Ragdoll, false)
+        
+        -- Remove all effects that might interfere
+        if bodyEffects then
+            bodyEffects:ClearAllChildren()
+        end
+    end
+end
+
+-- Connect a loop that constantly checks your character state
+RunService.Heartbeat:Connect(function()
+    local character = player.Character
+    if character then
+        applyAntiStomp(character)
+    end
+end)
+
+-- Re-apply anti-stomp logic after character respawn
+player.CharacterAdded:Connect(function(character)
+    -- Small delay to ensure character is fully loaded
+    character:WaitForChild("HumanoidRootPart", 5)
+    character:WaitForChild("Humanoid", 5)
+    -- No need to do anything here since RunService.Heartbeat is running and checks constantly
+end)
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ChatSpyGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = PlayerGui
+
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(0, 350, 0, 220)
+scrollFrame.Position = UDim2.new(0, 10, 0, 60) -- Slight vertical shift
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.BorderSizePixel = 0
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.ScrollBarThickness = 0 -- <- Hides scrollbar
+scrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollFrame.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
+scrollFrame.Parent = screenGui
+
+local layout = Instance.new("UIListLayout")
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 2)
+layout.Parent = scrollFrame
+
+-- Add message to log
+local function addChatMessage(playerName, message)
+	local msg = Instance.new("TextLabel")
+	msg.Size = UDim2.new(1, -10, 0, 0)
+	msg.BackgroundTransparency = 1
+	msg.TextColor3 = Color3.new(1, 1, 1)
+	msg.Font = Enum.Font.Code
+	msg.TextSize = 14
+	msg.TextXAlignment = Enum.TextXAlignment.Left
+	msg.TextWrapped = true
+	msg.AutomaticSize = Enum.AutomaticSize.Y
+	msg.Text = "[" .. playerName .. "]: " .. message
+	msg.Parent = scrollFrame
+
+	task.wait()
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+	scrollFrame.CanvasPosition = Vector2.new(0, layout.AbsoluteContentSize.Y)
+end
+
+-- Hook players
+local function hookPlayer(player)
+	player.Chatted:Connect(function(message)
+		addChatMessage(player.Name, message)
+	end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+	hookPlayer(player)
+end
+
+Players.PlayerAdded:Connect(hookPlayer)
+
+-- No Seats on Inject (No Toggle)
+
+local CollectionService = game:GetService("CollectionService")
+local workspace = game:GetService("Workspace")
+
+-- Cache seats
+local cachedSeats = {}
+
+-- Disable a seat
+local function disableSeat(seat)
+    if seat:IsA("Seat") and not cachedSeats[seat] then
+        cachedSeats[seat] = true
+        seat.Disabled = true
+        CollectionService:AddTag(seat, "Seat")
+    end
+end
+
+-- Initialize all existing seats
+for _, object in ipairs(workspace:GetDescendants()) do
+    if object:IsA("Seat") then
+        disableSeat(object)
+    end
+end
+
+-- Monitor for new seats
+workspace.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("Seat") then
+        disableSeat(descendant)
+    end
+end)
